@@ -1,0 +1,41 @@
+# Default training config for DIEP-ThermoSim
+# Use as: python train.py --config configs/default.yaml
+# (note: the current train.py reads CLI flags only; this YAML serves as
+#  documentation and can be loaded with PyYAML when a --config flag is added.)
+
+simulation:
+  nx: 64
+  ny: 64
+  voxel_mm: 1.0
+  initial_T_C: 32.0
+  cool_T_C: 18.0
+  ambient_T_C: 22.0
+  h_conv: 10.0
+  t_cool_s: 30.0
+  t_warm_s: 180.0
+  fps: 5
+  dt_s: 0.05
+
+dataset:
+  train_dir: data/train
+  val_dir: data/val
+  n_train: 200
+  n_val: 40
+  n_frames: 24
+  normalize: true
+
+model:
+  base: 32
+  hidden_3d: 16
+  dropout: 0.1
+
+training:
+  epochs: 30
+  batch_size: 4
+  lr: 0.001
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  workers: 2
+
+uncertainty:
+  mc_samples: 15

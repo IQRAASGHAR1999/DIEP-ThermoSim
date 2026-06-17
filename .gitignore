@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# project-specific
+data/
+runs/
+*.pt
+*.pth
+*.ckpt
+!docs/*.pt
+.ipynb_checkpoints/
+*.png.cache
