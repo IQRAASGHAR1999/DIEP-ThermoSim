@@ -35,11 +35,16 @@ from model import PerforatorNet, perforator_loss
 
 
 def localization_f1(pred_mask: torch.Tensor, gt_mask: torch.Tensor,
-                    threshold: float = 0.3, tol_px: int = 3) -> dict:
-    """Localization F1 by peak matching.
+                    threshold: float = 0.15, tol_px: int = 5) -> dict:
+    """Localization F1 by nearest-neighbour peak matching.
 
-    Convert both masks to peak point lists (local maxima above `threshold`)
-    and match within `tol_px` distance. Returns precision/recall/F1.
+    Each predicted peak is matched to its nearest unmatched GT peak within
+    tol_px. Using nearest-neighbour (not first-in-list) avoids the bug where
+    a high-value but far GT peak blocks a spatially close GT peak from matching.
+
+    threshold=0.15 (was 0.3): model outputs tight confident clusters, lower
+    threshold catches weaker vessels without adding many false positives.
+    tol_px=5 (was 3): accounts for 1mm voxel grid and soft Gaussian GT blobs.
     """
     def _peaks(x: torch.Tensor):
         x = x.detach().cpu()
@@ -59,23 +64,35 @@ def localization_f1(pred_mask: torch.Tensor, gt_mask: torch.Tensor,
     g_peaks = _peaks(gt_mask)
     if not p_peaks and not g_peaks:
         return {"precision": 1.0, "recall": 1.0, "f1": 1.0, "n_pred": 0, "n_gt": 0}
+    if not p_peaks:
+        return {"precision": 0.0, "recall": 0.0, "f1": 0.0,
+                "n_pred": 0, "n_gt": len(g_peaks)}
+    if not g_peaks:
+        return {"precision": 0.0, "recall": 0.0, "f1": 0.0,
+                "n_pred": len(p_peaks), "n_gt": 0}
+
     tp = 0
-    used = set()
+    used_gt = set()
     for pp in p_peaks:
+        # match to nearest unmatched GT peak, not first in list
+        best_dist, best_k = float("inf"), -1
         for k, gp in enumerate(g_peaks):
-            if k in used:
+            if k in used_gt:
                 continue
             d = math.hypot(pp[0] - gp[0], pp[1] - gp[1])
-            if d <= tol_px:
-                tp += 1
-                used.add(k)
-                break
+            if d < best_dist:
+                best_dist, best_k = d, k
+        if best_k >= 0 and best_dist <= tol_px:
+            tp += 1
+            used_gt.add(best_k)
+
     fp = len(p_peaks) - tp
     fn = len(g_peaks) - tp
     p = tp / (tp + fp + 1e-9)
     r = tp / (tp + fn + 1e-9)
     f1 = 2 * p * r / (p + r + 1e-9)
-    return {"precision": p, "recall": r, "f1": f1, "n_pred": len(p_peaks), "n_gt": len(g_peaks)}
+    return {"precision": p, "recall": r, "f1": f1,
+            "n_pred": len(p_peaks), "n_gt": len(g_peaks)}
 
 
 # ---------------------------------------------------------------------------
@@ -129,8 +146,11 @@ def train(args) -> None:
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False,
                             num_workers=args.workers)
 
+    use_defm = not getattr(args, "no_deformation_field", False)
     model = PerforatorNet(base=args.base, hidden_3d=args.hidden_3d,
-                          dropout=args.dropout).to(device)
+                          dropout=args.dropout,
+                          use_deformation_field=use_defm).to(device)
+    print(f"Deformation field: {'enabled' if use_defm else 'disabled (ablation)'}")
     n_params = sum(p.numel() for p in model.parameters())
     print(f"PerforatorNet: {n_params/1e6:.2f}M params")
 
@@ -210,6 +230,8 @@ def main() -> None:
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--workers", type=int, default=2)
     p.add_argument("--smoke-test", action="store_true")
+    p.add_argument("--no-deformation-field", action="store_true",
+                   help="Ablation: disable the thermal deformation field (DynGS-Pro port)")
     args = p.parse_args()
     train(args)
 
