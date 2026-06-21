@@ -136,8 +136,8 @@ def apply_deformation_to_video(
     inp_xy = xy.reshape(-1, 2)
     inp_t = tg.reshape(-1, 1)
     res = field(inp_xy, inp_t)            # [T*H*W, 1]
-    res = res.view(T, H, W, 1).permute(3, 0, 1, 2)  # [1, T, H, W]
-    return frames + res.unsqueeze(0)      # broadcasts over batch
+    res = res.view(1, T, 1, H, W)        # [1, T, 1, H, W] — matches frames [B, T, 1, H, W]
+    return frames + res                   # broadcasts over batch B
 
 
 def _smoke_test() -> None:
