@@ -26,6 +26,25 @@ from deformation_field import ThermalDeformationField, apply_deformation_to_vide
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _groups(n_channels: int, max_groups: int = 8) -> int:
+    """Return largest divisor of n_channels that is <= max_groups.
+
+    GroupNorm requires num_channels % num_groups == 0.
+    min(8, n_channels) breaks when n_channels is not divisible by 8
+    (e.g. n_channels=12 gives min(8,12)=8, but 12%8 != 0).
+    This helper always returns a valid value.
+    """
+    g = min(max_groups, n_channels)
+    while n_channels % g != 0:
+        g -= 1
+    return g
+
+
+# ---------------------------------------------------------------------------
 # Building blocks
 # ---------------------------------------------------------------------------
 
@@ -40,11 +59,11 @@ class TemporalEncoder(nn.Module):
         super().__init__()
         self.block = nn.Sequential(
             nn.Conv3d(in_ch, hidden, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.GroupNorm(min(8, hidden), hidden),
+            nn.GroupNorm(_groups(hidden), hidden),
             nn.ReLU(inplace=True),
             nn.Dropout3d(dropout),
             nn.Conv3d(hidden, hidden, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.GroupNorm(min(8, hidden), hidden),
+            nn.GroupNorm(_groups(hidden), hidden),
             nn.ReLU(inplace=True),
             nn.Dropout3d(dropout),
         )
@@ -60,11 +79,11 @@ class DoubleConv2D(nn.Sequential):
     def __init__(self, in_ch: int, out_ch: int, dropout: float = 0.1):
         super().__init__(
             nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
-            nn.GroupNorm(min(8, out_ch), out_ch),
+            nn.GroupNorm(_groups(out_ch), out_ch),
             nn.ReLU(inplace=True),
             nn.Dropout2d(dropout),
             nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1),
-            nn.GroupNorm(min(8, out_ch), out_ch),
+            nn.GroupNorm(_groups(out_ch), out_ch),
             nn.ReLU(inplace=True),
             nn.Dropout2d(dropout),
         )
