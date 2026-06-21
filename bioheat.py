@@ -68,7 +68,8 @@ class SimulationConfig:
     initial_T_C: float = 32.0
     cool_T_C: float = 18.0
     ambient_T_C: float = 22.0
-    h_conv: float = 10.0
+    h_conv: float = 10.0        # convection during cooling phase
+    h_conv_warm: float = 5.0    # convection during rewarming (gentler, natural convection)
     t_cool_s: float = 30.0
     t_warm_s: float = 180.0
     fps: int = 5
@@ -165,10 +166,10 @@ def run_simulation(cfg: SimulationConfig, vessels: list[Vessel]):
     n_steps_warm = int(round(cfg.t_warm_s / dt))
     frame_every = max(1, int(round(1.0 / (dt * cfg.fps))))
 
-    def evolve(env_T: float, record: bool, n_steps: int):
+    def evolve(env_T: float, record: bool, n_steps: int, h_conv: float):
         nonlocal T
         for s in range(n_steps):
-            T_ghost = T[0] - (2.0 * dx / k_top) * cfg.h_conv * (T[0] - env_T)
+            T_ghost = T[0] - (2.0 * dx / k_top) * h_conv * (T[0] - env_T)
             lap = _laplacian_xy(T, dx) + _laplacian_z(T, dx, T_ghost)
             perfusion = BLOOD_RHO_C * w_b * (T_ARTERY_C - T)
             rhs = (k * lap + perfusion + Q_m) / rho_c
@@ -176,8 +177,8 @@ def run_simulation(cfg: SimulationConfig, vessels: list[Vessel]):
             if record and (s % frame_every == 0):
                 frames.append(T[0].clone().cpu())
 
-    evolve(cfg.cool_T_C, record=False, n_steps=n_steps_cool)
-    evolve(cfg.ambient_T_C, record=True, n_steps=n_steps_warm)
+    evolve(cfg.cool_T_C,    record=False, n_steps=n_steps_cool, h_conv=cfg.h_conv)
+    evolve(cfg.ambient_T_C, record=True,  n_steps=n_steps_warm, h_conv=cfg.h_conv_warm)
 
     if not frames:
         frames.append(T[0].clone().cpu())
